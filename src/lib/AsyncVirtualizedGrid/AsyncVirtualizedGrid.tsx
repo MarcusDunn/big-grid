@@ -1,12 +1,13 @@
 import React from "react";
+import {Simulate} from "react-dom/test-utils";
+import load = Simulate.load;
 
-export type Fetch<T> =
-// fetch the count and items with the same request
-    | (({from, to}: { from: number, to: number }) => Promise<{ items: T[], count: number }>)
+export type Fetch<T> = (({from, to}: { from: number, to: number }) => Promise<{ items: T[], count: number }>)
 
 const DEFAULT_ROWS = 4;
 const DEFAULT_COLUMNS = 4;
 const DEFAULT_HEIGHT = 100;
+const ITEMS_PER_PAGE = 10;
 
 // allows injecting styles into a row.
 export type RenderRow<T extends { id: string | number; }> = (
@@ -50,6 +51,22 @@ export type AsyncVirtualizedGridProps<T extends { id: number | string }, > = {
     padding?: number,
 };
 
+type Loadable<T, E> =
+// the request is loading
+    | { status: "loading" }
+    // the request successfully completed
+    | { status: "complete", value: T }
+    // the request completed with an error
+    | { status: "error", error: E }
+
+type Data<T extends { id: string | number; }> = {
+    // the number of items the server has. undefined if we haven't fetched it yet.
+    count: undefined | number,
+    // the pages we have requested. May still be loading. The key is the `from` field of the page request.
+    // there can be no two keys within `ITEMS_PER_PAGE` of each other.
+    pages: Record<number, Loadable<T[], unknown>>
+};
+
 
 export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                                                                                fetch,
@@ -68,7 +85,7 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                                                                                padding = 200,
                                                                            }: AsyncVirtualizedGridProps<T>): ReturnType<React.FC> => {
 
-    const [currentlyInView, setCurrentlyInView] = React.useState({from: 0, to: rows * columns})
+    const [currentlyInView, setCurrentlyInView] = React.useState({from: 0, to: ITEMS_PER_PAGE})
 
     const handleScroll = React.useCallback((count: number, {
         from,
@@ -132,71 +149,79 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
         console.log(currentlyInView);
     }, [currentlyInView])
 
-    const bottomFakeHeight = React.useCallback((count: number) => {
+    const calcBottomFakeHeight = React.useCallback((count: number) => {
         return ((count - currentlyInView.to) / columns) * height
-    }, [currentlyInView.from, height, columns])
+    }, [currentlyInView.to, height, columns])
 
     const topFakeHeight = React.useMemo(() => {
         return (currentlyInView.from / columns) * height
     }, [currentlyInView.from, height, columns])
 
-    const [data, setData] = React.useState<| { status: 'loading' }
-        | { status: 'not requested' }
-        | { status: 'loaded', data: { items: { [p: number]: T }; count: number } }
-        | { status: 'error', error: unknown }>({status: 'not requested'});
+    const [data, setData] = React.useState<Data<T>>({
+        count: undefined,
+        pages: {}
+    });
 
     const loadData = React.useCallback(() => {
+        setData(({count, pages}) => ({count, pages: {...pages, [currentlyInView.from]: {status: "loading"}}}))
         fetch(currentlyInView)
             .then(({count, items}) => {
-                    setData(old => ({
-                        status: 'loaded',
-                        data: {
-                            count, items: items.reduce((acc, item, i) => ({...acc, [i + currentlyInView.from]: item}), old)
-                        }
+                    setData(({pages}) => ({
+                        count: count,
+                        pages: {...pages, [currentlyInView.from]: {status: "complete", value: items}}
                     }));
                 }
             )
-            .catch(error => setData({status: "error", error: error}))
+            .catch(error => setData(({count, pages}) => ({
+                count,
+                pages: {...pages, [currentlyInView.from]: {status: "error", error}}
+            })))
     }, [setData, fetch, currentlyInView]);
 
     React.useEffect(() => {
-        setData({status: 'loading'});
+        // when load data changes we no longer know how large the page is. reset everything.
+        setData({count: undefined, pages: {}})
         loadData();
     }, [loadData]);
 
-    switch (data.status) {
-        case "loading":
-            return <CountLoading/>;
-        case "not requested":
-            return <CountLoading/>;
-        case "loaded":
-            const array = Array(currentlyInView.to - currentlyInView.from)
-                .fill(0)
-                .map((_, i) => currentlyInView.from + i)
-            if (array.some(i => data.data.items[i] === undefined)) {
-                console.log("loading more data")
-                loadData();
-                return <CountLoading/>
-            }
-            console.log("about to render: ", currentlyInView)
-            return <div style={{overflowY: "scroll", width: "100%", height: "100%"}}
-                        onScroll={event => handleScroll(data.data.count, currentlyInView, event)}>
-                <div role={"presentation"} style={{height: topFakeHeight}}/>
-                {array
-                    .filter(i => i % columns == 0)
-                    .reduce((acc, i) => [...acc, array.slice(i, i + columns).map(j => data.data.items[j])], [] as T[][])
-                    .map(row => renderRow(renderRowBase, row, {
-                        display: "flex",
-                        height: height
-                    }, item => renderCell(renderCellBase, item, {})))}
-                <div role={"presentation"}
-                     style={{height: bottomFakeHeight(data.data.count)}}/>
-            </div>
-        case "error":
-            return <CountError error={data.error} reportError={reportError}/>
-        default:
-            return data
+    // if we do not know the count - we cannot measure the size of anything. so we need to wait for the count.
+    const count = data.count;
+    if (count === undefined) {
+        return <CountLoading/>
     }
+
+    const bottomFakeHeight = calcBottomFakeHeight(count);
+
+    return <div style={{overflowY: "scroll", height: '100%', display: "flex", flexDirection: "row"}} onScroll={(event) => handleScroll(count, currentlyInView, event)}>
+        <div role={"presentation"} style={{height: topFakeHeight}}/>
+        {
+            Object
+                .keys(data.pages)
+                .map(it => parseInt(it, 10))
+                .flatMap(from => {
+                    console.log("rendering page", from, currentlyInView)
+                    if (from >= currentlyInView.from && from < currentlyInView.to) {
+                        const newVar = [data.pages[from]];
+                        console.log(newVar)
+                        return newVar
+                    } else {
+                        return []
+                    }
+                }).map(loadable => {
+                switch (loadable.status) {
+                    case "loading":
+                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>Loading...</div>
+                    case "error":
+                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>Error...</div>
+                    case "complete":
+                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>{JSON.stringify(loadable.value)}</div>
+                    default:
+                        return loadable;
+                }
+            })
+        }
+        <div role={"presentation"} style={{height: bottomFakeHeight}}/>
+    </div>
 }
 
 const renderRowBase = <T extends { id: string | number; }, >(items: T[], style: React.CSSProperties, renderCell: (item: T) => React.ReactNode): React.ReactNode =>
