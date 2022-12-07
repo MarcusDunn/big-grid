@@ -5,7 +5,6 @@ export type Fetch<T> = (({from, to}: { from: number, to: number }) => Promise<{ 
 const DEFAULT_ROWS = 4;
 const DEFAULT_COLUMNS = 4;
 const DEFAULT_HEIGHT = 100;
-const ITEMS_PER_PAGE = 10;
 
 // allows injecting styles into a row.
 export type RenderRow<T extends { id: string | number; }> = (
@@ -83,7 +82,8 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                                                                                padding = 200,
                                                                            }: AsyncVirtualizedGridProps<T>): ReturnType<React.FC> => {
 
-    const [currentlyInView, setCurrentlyInView] = React.useState({from: 0, to: ITEMS_PER_PAGE})
+    const itemsPerPage = rows * columns;
+    const [currentlyInView, setCurrentlyInView] = React.useState({from: 0, to: itemsPerPage})
 
     const handleScroll = React.useCallback((count: number, {
         from,
@@ -190,7 +190,8 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
 
     const bottomFakeHeight = calcBottomFakeHeight(count);
 
-    return <div style={{overflowY: "scroll", height: '100%', display: "flex", flexDirection: "row"}} onScroll={(event) => handleScroll(count, currentlyInView, event)}>
+    return <div style={{overflowY: "scroll", height: '100%', display: "flex", flexDirection: "row"}}
+                onScroll={(event) => handleScroll(count, currentlyInView, event)}>
         <div role={"presentation"} style={{height: topFakeHeight}}/>
         {
             Object
@@ -205,18 +206,20 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                     } else {
                         return []
                     }
-                }).map(loadable => {
-                switch (loadable.status) {
-                    case "loading":
-                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>Loading...</div>
-                    case "error":
-                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>Error...</div>
-                    case "complete":
-                        return <div style={{height: (ITEMS_PER_PAGE / columns) * height}}>{JSON.stringify(loadable.value)}</div>
-                    default:
-                        return loadable;
-                }
-            })
+                })
+                .map(loadable => {
+                    switch (loadable.status) {
+                        case "loading":
+                            return <div style={{height: (itemsPerPage / columns) * height}}>Loading...</div>
+                        case "error":
+                            return <div style={{height: (itemsPerPage / columns) * height}}>Error...</div>
+                        case "complete":
+                            return <div
+                                style={{height: (itemsPerPage / columns) * height}}>{JSON.stringify(loadable.value)}</div>
+                        default:
+                            return loadable;
+                    }
+                })
         }
         <div role={"presentation"} style={{height: bottomFakeHeight}}/>
     </div>
