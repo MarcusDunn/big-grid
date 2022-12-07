@@ -214,8 +214,8 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                         case "error":
                             return <div style={{height: (itemsPerPage / columns) * height}}>Error...</div>
                         case "complete":
-                            return <div
-                                style={{height: (itemsPerPage / columns) * height}}>{JSON.stringify(loadable.value)}</div>
+                            return <Page<T> columns={columns} renderItem={renderCell} renderRow={renderRow}
+                                            items={loadable.value}></Page>
                         default:
                             return loadable;
                     }
@@ -223,6 +223,27 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
         }
         <div role={"presentation"} style={{height: bottomFakeHeight}}/>
     </div>
+}
+
+const Page = <T extends { id: string | number; }, >({
+                                                        items,
+                                                        renderItem,
+                                                        renderRow,
+                                                        columns,
+                                                    }: { items: T[], renderRow: RenderRow<T>, renderItem: RenderCell<T>, columns: number }) => {
+    // a page must break on exactly a row boundary
+    if (items.length % columns !== 0) {
+        console.error(`invalid page ${items.length} items, ${columns} columns`)
+    }
+
+    return <>
+        {
+            items
+                .filter((_, i) => i % columns === 0) // get the first index of each row
+                .map((_, i) => Array(columns).fill(0).map((_, j) => items[i * columns + j])) // map that first index to the whole row
+                .map(rowItems => renderRow(renderRowBase, rowItems, {}, (item) => renderItem(renderCellBase, item, {}))) // render each row
+        }
+    </>
 }
 
 const renderRowBase = <T extends { id: string | number; }, >(items: T[], style: React.CSSProperties, renderCell: (item: T) => React.ReactNode): React.ReactNode =>
