@@ -1,6 +1,4 @@
 import React from "react";
-import {Simulate} from "react-dom/test-utils";
-import load = Simulate.load;
 
 export type Fetch<T> = (({from, to}: { from: number, to: number }) => Promise<{ items: T[], count: number }>)
 
