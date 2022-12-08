@@ -83,6 +83,8 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                                                                            }: AsyncVirtualizedGridProps<T>): ReturnType<React.FC> => {
 
     const itemsPerPage = rows * columns;
+
+    // represents a contiguous range of items that are currently being rendered.
     const [currentlyInView, setCurrentlyInView] = React.useState({from: 0, to: itemsPerPage})
 
     const handleScroll = React.useCallback((count: number, {
@@ -101,24 +103,24 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
         const inViewBottom = Math.min((count / columns) * height, scrollTop + clientHeight + padding)
         // if the top of the viewport is below the top of the rendered content
         console.log({scrollTop, clientHeight, renderedTop, renderedBottom, inViewTop, inViewBottom})
-        // if (inViewTop > renderedTop) {
-        //     // we should render fewer items above
-        //     console.log("we should be rendering less at the top!")
-        //     setCurrentlyInView(({
-        //                             to: oldTo
-        //                         }) => ({from: Math.max(0, Math.floor((inViewTop * columns) / height)), to: oldTo}));
-        // }
+        if (inViewTop > renderedTop) {
+            // we should render fewer items above
+            console.log("we should be rendering less at the top!")
+            setCurrentlyInView(({
+                                    to: oldTo
+                                }) => ({from: Math.max(0, Math.floor((inViewTop * columns) / height)), to: oldTo}));
+        }
         // if the bottom of the viewport is above the bottom of the rendered content
-        // if (inViewBottom < renderedBottom) {
-        //     // we should render fewer items at the bottom
-        //     console.log("we should be rendering less at the bottom!")
-        //     setCurrentlyInView(({
-        //                             from: oldFrom,
-        //                         }) => ({
-        //         from: oldFrom,
-        //         to: Math.min(count, Math.ceil((inViewBottom * columns) / height))
-        //     }));
-        // }
+        if (inViewBottom < renderedBottom) {
+            // we should render fewer items at the bottom
+            console.log("we should be rendering less at the bottom!")
+            setCurrentlyInView(({
+                                    from: oldFrom,
+                                }) => ({
+                from: oldFrom,
+                to: Math.min(count, Math.ceil((inViewBottom * columns) / height))
+            }));
+        }
         // if the top of the viewport is above the top of the rendered content
         if (inViewTop < renderedTop) {
             // we should render more items above
@@ -136,14 +138,10 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
             console.log("we should be rendering more at the bottom!")
             setCurrentlyInView(({
                                     from: oldFrom,
-                                }) => {
-                const newVar = {
-                    from: oldFrom,
-                    to: Math.min(count, Math.ceil((inViewBottom * columns) / height))
-                };
-                console.log(newVar)
-                return newVar;
-            });
+                                }) => ({
+                from: oldFrom,
+                to: Math.min(count, Math.ceil((inViewBottom * columns) / height))
+            }));
         }
     }, [setCurrentlyInView, padding])
 
@@ -196,36 +194,34 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
 
     return <div style={{overflowY: "scroll", height: '100%', display: "flex", flexDirection: "column"}}
                 onScroll={(event) => handleScroll(count, currentlyInView, event)}>
-        <div role={"presentation"} style={{height: topFakeHeight}}/>
+        <div role={"presentation"} key={"padding-top"} style={{height: topFakeHeight}}/>
         {
             Object
                 .keys(data.pages)
                 .map(it => parseInt(it, 10))
                 .flatMap(from => {
-                    console.log("rendering page", from, currentlyInView)
+                    console.log("rendering page", from)
                     if (from >= currentlyInView.from && from < currentlyInView.to) {
-                        const newVar = [data.pages[from]];
-                        console.log(newVar)
-                        return newVar
+                        return [[from, data.pages[from]] as [number, Loadable<T[], unknown>]]
                     } else {
                         return []
                     }
                 })
-                .map(loadable => {
+                .map(([from, loadable]) => {
                     switch (loadable.status) {
                         case "loading":
-                            return <div style={{height}}>Loading...</div>
+                            return <div style={{height}} key={from}>Loading...</div>
                         case "error":
-                            return <div style={{height}}>Error...</div>
+                            return <div style={{height}} key={from}>Error...</div>
                         case "complete":
                             return <Page<T> columns={columns} renderItem={renderCell} renderRow={renderRow}
-                                            items={loadable.value} height={height}/>
+                                            items={loadable.value} height={height} key={from}/>
                         default:
                             return loadable;
                     }
                 })
         }
-        <div role={"presentation"} style={{height: bottomFakeHeight}}/>
+        <div role={"presentation"} key={"padding-bot"} style={{height: bottomFakeHeight}}/>
     </div>
 }
 
@@ -248,7 +244,7 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                     .map((_, i) => Array(columns).fill(0).map((_, j) => items[i * columns + j])) // map that first index to the whole row
                     .map(rowItems => renderRow(renderRowBase, rowItems, {
                         height,
-                        display: "flex"
+                        display: "flex",
                     }, (item) => renderItem(renderCellBase, item, {height}))) // render each row
             }
         </>
