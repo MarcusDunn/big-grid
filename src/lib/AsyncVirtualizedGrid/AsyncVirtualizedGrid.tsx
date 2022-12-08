@@ -74,11 +74,6 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
                                                                                renderCell = (defaultRender, item, style) => defaultRender(item, style),
                                                                                CountLoading = () => <div>Loading
                                                                                    count...</div>,
-                                                                               reportError = (error) => console.error(error),
-                                                                               CountError = ({error, reportError}) => {
-                                                                                   reportError(error);
-                                                                                   return <div>Count Error</div>
-                                                                               },
                                                                                padding = 200,
                                                                            }: AsyncVirtualizedGridProps<T>): ReturnType<React.FC> => {
 
