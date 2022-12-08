@@ -185,6 +185,7 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
         return <CountLoading/>
     }
 
+    // with the count we can now determine how much blank space to render below our actual content
     const bottomFakeHeight = calcBottomFakeHeight(count);
 
     return <div style={{overflowY: "scroll", height: '100%', display: "flex", flexDirection: "column"}}
@@ -220,35 +221,35 @@ export const AsyncVirtualizedGrid = <T extends { id: string | number; }, >({
     </div>
 }
 
-    const Page = <T extends { id: string | number; }, >({
-                                                            items,
-                                                            renderItem,
-                                                            renderRow,
-                                                            columns,
-                                                            height,
-                                                        }: { items: T[], renderRow: RenderRow<T>, renderItem: RenderCell<T>, columns: number, height: number }) => {
-        // a page must break on exactly a row boundary
-        if (items.length % columns !== 0) {
-            console.error(`invalid page ${items.length} items, ${columns} columns`)
-        }
-
-        return <>
-            {
-                items
-                    .filter((_, i) => i % columns === 0) // get the first index of each row
-                    .map((_, i) => Array(columns).fill(0).map((_, j) => items[i * columns + j])) // map that first index to the whole row
-                    .map(rowItems => renderRow(renderRowBase, rowItems, {
-                        height,
-                        display: "flex",
-                    }, (item) => renderItem(renderCellBase, item, {height}))) // render each row
-            }
-        </>
+const Page = <T extends { id: string | number; }, >({
+                                                        items,
+                                                        renderItem,
+                                                        renderRow,
+                                                        columns,
+                                                        height,
+                                                    }: { items: T[], renderRow: RenderRow<T>, renderItem: RenderCell<T>, columns: number, height: number }) => {
+    // a page must break on exactly a row boundary
+    if (items.length % columns !== 0) {
+        console.error(`invalid page ${items.length} items, ${columns} columns`)
     }
 
-    const renderRowBase = <T extends { id: string | number; }, >(items: T[], style: React.CSSProperties, renderCell: (item: T) => React.ReactNode): React.ReactNode =>
-        <div style={style} key={items.reduce((acc, item) => acc + item.id.toString(), "row:")}>
-            {items.map(renderCell)}
-        </div>
+    return <>
+        {
+            items
+                .filter((_, i) => i % columns === 0) // get the first index of each row
+                .map((_, i) => Array(columns).fill(0).map((_, j) => items[i * columns + j])) // map that first index to the whole row
+                .map(rowItems => renderRow(renderRowBase, rowItems, {
+                    height,
+                    display: "flex",
+                }, (item) => renderItem(renderCellBase, item, {height}))) // render each row
+        }
+    </>
+}
 
-    const renderCellBase = <T extends { id: string | number; }, >(item: T, style: React.CSSProperties): React.ReactNode =>
-        <div style={style} key={"item" + item.id}>{JSON.stringify(item)}</div>
+const renderRowBase = <T extends { id: string | number; }, >(items: T[], style: React.CSSProperties, renderCell: (item: T) => React.ReactNode): React.ReactNode =>
+    <div style={style} key={items.reduce((acc, item) => acc + item.id.toString(), "row:")}>
+        {items.map(renderCell)}
+    </div>
+
+const renderCellBase = <T extends { id: string | number; }, >(item: T, style: React.CSSProperties): React.ReactNode =>
+    <div style={style} key={"item" + item.id}>{JSON.stringify(item)}</div>
